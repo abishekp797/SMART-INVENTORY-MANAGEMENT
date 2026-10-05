@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OptiStock AI — Smart Inventory Optimization & Stockout Prediction</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    body {
+      background-color: #0b1120;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-[#0b1120] text-slate-100 antialiased p-4 md:p-6 flex flex-col gap-5">
+
+  <!-- Header & Sector Switcher -->
+  <header class="bg-[#131c31] border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl md:text-2xl font-bold tracking-tight text-white">OptiStock AI</h1>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Enterprise v2.4</span>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Live Simulation Ready</span>
+        </div>
+        <p class="text-xs md:text-sm text-slate-400">Autonomous Demand Forecasting, Stockout Prevention & Excess Inventory Depletion</p>
+      </div>
+    </div>
+
+    <!-- Controls & Sector Mode -->
+    <div class="flex flex-wrap items-center gap-3">
+      <!-- Sector Toggle -->
+      <div class="bg-slate-900/80 p-1 rounded-xl border border-slate-700/80 flex items-center">
+        <button id="sector-retail-btn" onclick="setSector('Retail')" class="px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all bg-blue-600 text-white shadow">
+          🛒 Retail Omnichannel
+        </button>
+        <button id="sector-mfg-btn" onclick="setSector('Manufacturing')" class="px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all text-slate-400 hover:text-slate-200">
+          🏭 Manufacturing & BOM
+        </button>
+      </div>
+
+      <button onclick="exportToCSV()" class="px-3.5 py-1.5 rounded-xl text-xs md:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        Export ERP CSV
+      </button>
+    </div>
+  </header>
+
+  <!-- Live Simulation Parameter Bar -->
+  <div class="bg-gradient-to-r from-slate-900 via-slate-800/90 to-slate-900 border border-slate-700/70 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs md:text-sm shadow-md">
+    <div class="flex items-center gap-2 font-semibold text-slate-300">
+      <span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+      What-If Dynamic Parameters:
+    </div>
+
+    <div class="flex flex-wrap items-center gap-6">
+      <!-- Lead Time Shock Slider -->
+      <div class="flex items-center gap-2">
+        <label for="lead-time-shock" class="text-slate-400">Supplier Delay:</label>
+        <input type="range" id="lead-time-shock" min="0" max="100" step="10" value="0" oninput="updateSimulationParams()" class="w-24 accent-blue-500 cursor-pointer">
+        <span id="lead-time-shock-val" class="font-mono text-cyan-400 font-bold min-w-[45px]">+0%</span>
+      </div>
+
+      <!-- Demand Spike Slider -->
+      <div class="flex items-center gap-2">
+        <label for="demand-shock" class="text-slate-400">Demand Surge:</label>
+        <input type="range" id="demand-shock" min="-30" max="100" step="10" value="0" oninput="updateSimulationParams()" class="w-24 accent-indigo-500 cursor-pointer">
+        <span id="demand-shock-val" class="font-mono text-indigo-400 font-bold min-w-[45px]">+0%</span>
+      </div>
+
+      <!-- Service Level Slider -->
+      <div class="flex items-center gap-2">
+        <label for="service-level" class="text-slate-400">Target Service Level:</label>
+        <select id="service-level" onchange="updateSimulationParams()" class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-blue-500">
+          <option value="0.90">90% (Z=1.28)</option>
+          <option value="0.95" selected>95% (Z=1.65)</option>
+          <option value="0.98">98% (Z=2.05)</option>
+          <option value="0.99">99% (Z=2.33)</option>
+        </select>
+      </div>
+
+      <button onclick="resetSimulationParams()" class="text-slate-400 hover:text-white underline text-xs">Reset All</button>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Banner -->
+  <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <!-- Card 1: Critical Stockout Imminent -->
+    <div class="bg-[#131c31] border border-red-500/30 rounded-xl p-4 shadow relative overflow-hidden flex flex-col justify-between">
+      <div class="absolute -right-2 -top-2 w-16 h-16 bg-red-500/10 rounded-full blur-xl pointer-events-none"></div>
+      <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+        <span>STOCKOUT RISK</span>
+        <span class="p-1 rounded bg-red-500/20 text-red-400 text-[11px] font-bold">URGENT</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span id="kpi-stockout-count" class="text-3xl font-extrabold text-red-400">2</span>
+        <span class="text-xs text-slate-400">SKUs &lt; 7 Days Cover</span>
+      </div>
+      <p id="kpi-stockout-sub" class="text-xs text-red-300/80 mt-1 font-medium">Revenue at risk: $42,850</p>
+    </div>
+
+    <!-- Card 2: Low Stock / Reorder Point Crossed -->
+    <div class="bg-[#131c31] border border-amber-500/30 rounded-xl p-4 shadow relative overflow-hidden flex flex-col justify-between">
+      <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+        <span>TRIGGER REORDER</span>
+        <span class="p-1 rounded bg-amber-500/20 text-amber-400 text-[11px] font-bold">ROP HIT</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span id="kpi-reorder-count" class="text-3xl font-extrabold text-amber-400">2</span>
+        <span class="text-xs text-slate-400">POs Recommended</span>
+      </div>
+      <p id="kpi-reorder-sub" class="text-xs text-amber-300/80 mt-1 font-medium">Replenishment: $18,400</p>
+    </div>
+
+    <!-- Card 3: Dead & Excess Capital -->
+    <div class="bg-[#131c31] border border-purple-500/30 rounded-xl p-4 shadow relative overflow-hidden flex flex-col justify-between">
+      <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+        <span>EXCESS & DEAD CAPITAL</span>
+        <span class="p-1 rounded bg-purple-500/20 text-purple-400 text-[11px] font-bold">TIED CASH</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span id="kpi-excess-capital" class="text-2xl font-extrabold text-purple-400">$29,620</span>
+        <span class="text-xs text-slate-400">Trapped</span>
+      </div>
+      <p id="kpi-excess-sub" class="text-xs text-purple-300/80 mt-1 font-medium">2 SKUs with &gt; 90d cover</p>
+    </div>
+
+    <!-- Card 4: Annual Holding Cost Leakage -->
+    <div class="bg-[#131c31] border border-slate-700 rounded-xl p-4 shadow relative overflow-hidden flex flex-col justify-between">
+      <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+        <span>HOLDING WASTE / YR</span>
+        <span class="p-1 rounded bg-slate-800 text-slate-300 text-[11px] font-mono">22% Avg</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span id="kpi-holding-waste" class="text-2xl font-extrabold text-slate-200">$6,516</span>
+        <span class="text-xs text-slate-400">Avoidable Loss</span>
+      </div>
+      <p class="text-xs text-emerald-400 mt-1 font-medium">Depletion target: $540/mo saved</p>
+    </div>
+
+    <!-- Card 5: Inventory Valuation & Turnover -->
+    <div class="bg-[#131c31] border border-blue-500/30 rounded-xl p-4 shadow relative overflow-hidden flex flex-col justify-between">
+      <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+        <span>ACTIVE PORTFOLIO</span>
+        <span class="p-1 rounded bg-blue-500/20 text-blue-400 text-[11px] font-mono">ITR: 4.8x</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span id="kpi-total-val" class="text-2xl font-extrabold text-blue-400">$68,240</span>
+        <span class="text-xs text-slate-400">Total Asset Value</span>
+      </div>
+      <p id="kpi-active-skus" class="text-xs text-blue-300/80 mt-1 font-medium">6 SKUs Tracked</p>
+    </div>
+  </section>
+
+  <!-- Real-Time Smart Alert Feed Bar -->
+  <div id="alert-banner" class="bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/60 border border-red-500/40 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-md">
+    <div class="flex items-center gap-3">
+      <span class="flex h-3 w-3 relative">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+      </span>
+      <div class="text-xs md:text-sm">
+        <span class="font-bold text-red-300">ACTIVE CRITICAL ALERT:</span>
+        <span id="alert-headline" class="text-slate-200 ml-1">SKU RET-FIT-006 (Apex Pulse Smartwatch) will stock out in 1.2 days! Supplier lead time is 15 days.</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <button onclick="openSkuModal(currentSector === 'Retail' ? 'RET-FIT-006' : 'MFG-GEAR-106')" class="px-2.5 py-1 text-xs font-semibold rounded bg-red-600 hover:bg-red-500 text-white transition shadow">
+        Resolve Now &rarr;
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Grid: Forecasting Chart & Analytics -->
+  <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    
+    <!-- Left Column: Forecasting Visualizer & What-If Deep Dive (7 cols) -->
+    <div class="lg:col-span-7 bg-[#131c31] border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-800">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>📈 Multi-Horizon Demand Forecasting & Stock Runout Projection</span>
+          </h2>
+          <p class="text-xs text-slate-400">Holt-Winters double exponential smoothing with 95% confidence bounds & buffer thresholds</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-slate-400">Select SKU:</label>
+          <select id="forecast-sku-select" onchange="renderForecastChart()" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500">
+            <!-- Dynamically populated -->
+          </select>
+        </div>
+      </div>
+
+      <!-- Canvas Chart Container -->
+      <div class="relative w-full h-72 md:h-80 bg-slate-950/60 rounded-xl border border-slate-800/80 p-3 flex flex-col justify-between">
+        <canvas id="forecastCanvas" class="w-full h-full block"></canvas>
+      </div>
+
+      <!-- Chart Legend & Statistical Insights -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+        <div class="flex items-center gap-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+          <span class="w-3 h-3 rounded bg-blue-500 shrink-0"></span>
+          <div>
+            <div class="text-slate-400 text-[11px]">Historical Demand</div>
+            <div id="stat-hist-avg" class="font-mono font-bold text-slate-200">12.4 u/day</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+          <span class="w-3 h-3 rounded bg-indigo-400 shrink-0"></span>
+          <div>
+            <div class="text-slate-400 text-[11px]">Projected Mean</div>
+            <div id="stat-proj-avg" class="font-mono font-bold text-indigo-300">14.8 u/day</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+          <span class="w-3 h-3 rounded bg-amber-500 shrink-0"></span>
+          <div>
+            <div class="text-slate-400 text-[11px]">Reorder Point (ROP)</div>
+            <div id="stat-rop" class="font-mono font-bold text-amber-300">124 units</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+          <span class="w-3 h-3 rounded bg-emerald-500 shrink-0"></span>
+          <div>
+            <div class="text-slate-400 text-[11px]">Safety Stock (SS)</div>
+            <div id="stat-ss" class="font-mono font-bold text-emerald-300">42 units</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Slow-Moving & Excess Inventory Heatmap (5 cols) -->
+    <div class="lg:col-span-5 bg-[#131c31] border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>📦 Capital Lockup & Dead Stock Radar</span>
+          </h2>
+          <p class="text-xs text-slate-400">Aging inventory, stagnant assets, and liquidation priority</p>
+        </div>
+        <span class="text-xs font-semibold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">ABC-XYZ Analysis</span>
+      </div>
+
+      <div class="flex flex-col gap-3 custom-scrollbar overflow-y-auto max-h-[380px] pr-1" id="excess-items-list">
+        <!-- Dynamically rendered list of slow-moving/excess items -->
+      </div>
+
+      <div class="mt-auto bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
+        <div class="text-slate-400">
+          <span class="text-white font-medium">Recommended Liquidation Campaign:</span>
+          <div>Bundle, markdown, or vendor return to free up <strong id="excess-cash-reclaim" class="text-purple-300 font-bold">$29,620</strong></div>
+        </div>
+        <button onclick="alert('Simulation: Liquidation discount strategy queued for ERP pricing engine.')" class="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition shrink-0">
+          Apply Discount
+        </button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Complete SKU Optimization Master Table -->
+  <section class="bg-[#131c31] border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-3 border-b border-slate-800">
+      <div class="flex items-center gap-3">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          <span>📋 Inventory SKU Health & Stockout Risk Matrix</span>
+        </h2>
+        <span id="table-sku-count" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">6 SKUs</span>
+      </div>
+
+      <!-- Filter Tabs & Search -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="relative">
+          <input type="text" id="sku-search-input" oninput="renderTable()" placeholder="Search SKU or name..." class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 w-44 md:w-56">
+          <svg class="w-4 h-4 text-slate-500 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+
+        <div class="bg-slate-900 p-1 rounded-lg border border-slate-800 flex items-center text-xs">
+          <button onclick="setFilter('ALL')" id="filter-btn-ALL" class="px-2.5 py-1 rounded bg-slate-800 text-white font-medium">All</button>
+          <button onclick="setFilter('CRITICAL')" id="filter-btn-CRITICAL" class="px-2.5 py-1 rounded text-slate-400 hover:text-red-400">Critical</button>
+          <button onclick="setFilter('LOW')" id="filter-btn-LOW" class="px-2.5 py-1 rounded text-slate-400 hover:text-amber-400">Low Stock</button>
+          <button onclick="setFilter('HEALTHY')" id="filter-btn-HEALTHY" class="px-2.5 py-1 rounded text-slate-400 hover:text-emerald-400">Healthy</button>
+          <button onclick="setFilter('EXCESS')" id="filter-btn-EXCESS" class="px-2.5 py-1 rounded text-slate-400 hover:text-purple-400">Excess / Dead</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="overflow-x-auto custom-scrollbar">
+      <table class="w-full text-left text-xs border-collapse">
+        <thead>
+          <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold text-[11px]">
+            <th class="py-3 px-3">SKU Identifier</th>
+            <th class="py-3 px-3">Category</th>
+            <th class="py-3 px-3 text-right">Unit Cost</th>
+            <th class="py-3 px-3 text-center">Current Stock</th>
+            <th class="py-3 px-3 text-center">Safety Stock (SS)</th>
+            <th class="py-3 px-3 text-center">Reorder Point (ROP)</th>
+            <th class="py-3 px-3 text-center">Days to Stockout</th>
+            <th class="py-3 px-3 text-center">14d Stockout Risk</th>
+            <th class="py-3 px-3 text-center">Health Status</th>
+            <th class="py-3 px-3 text-right">Replenishment Action</th>
+            <th class="py-3 px-3 text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="sku-table-body" class="divide-y divide-slate-800/60 font-sans">
+          <!-- Populated by JavaScript -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SKU Diagnostic Deep-Dive Modal -->
+  <div id="sku-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#131c31] border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl p-6 flex flex-col gap-5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div id="modal-status-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+            CRITICAL STOCKOUT
+          </div>
+          <div>
+            <h3 id="modal-sku-name" class="text-lg font-bold text-white">Noise-Cancelling Wireless Headphones Pro</h3>
+            <span id="modal-sku-id" class="text-xs font-mono text-slate-400">RET-ELEC-001</span>
+          </div>
+        </div>
+        <button onclick="closeSkuModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Key Math Parameters Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <div class="text-slate-400">Avg Daily Demand (&mu;)</div>
+          <div id="modal-param-davg" class="text-base font-bold font-mono text-cyan-400 mt-1">14.2 u/d</div>
+          <div id="modal-param-dstd" class="text-[11px] text-slate-500">&sigma; = 3.8 u/d</div>
+        </div>
+        <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <div class="text-slate-400">Lead Time (L)</div>
+          <div id="modal-param-lt" class="text-base font-bold font-mono text-indigo-400 mt-1">12 days</div>
+          <div id="modal-param-ltstd" class="text-[11px] text-slate-500">&sigma;_L = 2.5 days</div>
+        </div>
+        <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <div class="text-slate-400">Safety Stock (SS)</div>
+          <div id="modal-param-ss" class="text-base font-bold font-mono text-emerald-400 mt-1">48 units</div>
+          <div id="modal-param-z" class="text-[11px] text-slate-500">Z = 2.05 (98%)</div>
+        </div>
+        <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <div class="text-slate-400">Economic Order (EOQ)</div>
+          <div id="modal-param-eoq" class="text-base font-bold font-mono text-amber-400 mt-1">85 units</div>
+          <div id="modal-param-moq" class="text-[11px] text-slate-500">MOQ = 40 units</div>
+        </div>
+      </div>
+
+      <!-- Monte Carlo Simulation Panel -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Monte Carlo Stochastic Stockout Run (500 Iterations over 60 Days)
+          </span>
+          <span class="text-[11px] text-slate-400">Non-linear Lead Time & Demand Jitter</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800/80 text-center">
+            <div class="text-slate-400">Empirical Stockout Probability</div>
+            <div id="modal-mc-prob" class="text-xl font-extrabold text-red-400 mt-1 font-mono">68.4%</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">High disruption vulnerability</div>
+          </div>
+          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800/80 text-center">
+            <div class="text-slate-400">Estimated Lost Sales</div>
+            <div id="modal-mc-lost" class="text-xl font-extrabold text-amber-400 mt-1 font-mono">112 units</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">Opportunity cost: $9,520</div>
+          </div>
+          <div class="bg-slate-950 p-3 rounded-lg border border-slate-800/80 text-center">
+            <div class="text-slate-400">Recommended Order Quantity</div>
+            <div id="modal-mc-order" class="text-xl font-extrabold text-emerald-400 mt-1 font-mono">120 units</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">Batch aligns with supplier MOQ</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Recommendation Box -->
+      <div class="bg-blue-950/40 border border-blue-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div>
+          <span class="text-blue-300 font-bold">Optimization Protocol:</span>
+          <p id="modal-action-text" class="text-slate-300 mt-0.5">Trigger immediate PO for 120 units. Lead time is 12 days; safety stock will absorb holiday variance.</p>
+        </div>
+        <button onclick="approvePurchaseOrder()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-500/25 transition shrink-0">
+          Approve PO Requisition
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="mt-4 border-t border-slate-800 pt-4 pb-2 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500">
+    <div>OptiStock Autonomous Optimization System &bull; Powered by Deep Demand Forecasting & Dynamic ROP Modeling</div>
+    <div class="font-mono">Retail & Manufacturing Unified Engine</div>
+  </footer>
+
+  <script>
+    // --- Data Definitions ---
+    const RAW_DATA = [
+      // Retail SKUs
+      {
+        sku_id: "RET-ELEC-001",
+        name: "Noise-Cancelling Wireless Headphones Pro",
+        category: "Consumer Electronics",
+        sector: "Retail",
+        unit_cost: 85.0,
+        selling_price: 199.99,
+        current_stock: 28,
+        incoming_po_stock: 50,
+        lead_time_days: 12,
+        lead_time_std_days: 2.5,
+        holding_cost_annual_rate: 0.20,
+        order_fixed_cost: 150.0,
+        moq: 40,
+        target_service_level: 0.98,
+        base_daily_demand: 14.2,
+        demand_trend: "SURGING",
+        demand_variance: 3.8
+      },
+      {
+        sku_id: "RET-GROC-002",
+        name: "Artisan Colombian Whole Bean Coffee (1kg)",
+        category: "Specialty Food & Grocery",
+        sector: "Retail",
+        unit_cost: 9.5,
+        selling_price: 24.0,
+        current_stock: 62,
+        incoming_po_stock: 100,
+        lead_time_days: 7,
+        lead_time_std_days: 1.0,
+        holding_cost_annual_rate: 0.25,
+        order_fixed_cost: 45.0,
+        moq: 60,
+        target_service_level: 0.95,
+        base_daily_demand: 18.5,
+        demand_trend: "STEADY",
+        demand_variance: 4.1
+      },
+      {
+        sku_id: "RET-APPL-003",
+        name: "Thermal Expedition Winter Down Parka",
+        category: "Apparel & Fashion",
+        sector: "Retail",
+        unit_cost: 65.0,
+        selling_price: 180.0,
+        current_stock: 420,
+        incoming_po_stock: 0,
+        lead_time_days: 21,
+        lead_time_std_days: 4.0,
+        holding_cost_annual_rate: 0.28,
+        order_fixed_cost: 200.0,
+        moq: 50,
+        target_service_level: 0.90,
+        base_daily_demand: 2.1,
+        demand_trend: "DECLINING",
+        demand_variance: 1.2
+      },
+      {
+        sku_id: "RET-HOME-004",
+        name: "Minimalist Ergonomic Mesh Desk Chair",
+        category: "Home & Office",
+        sector: "Retail",
+        unit_cost: 110.0,
+        selling_price: 289.0,
+        current_stock: 75,
+        incoming_po_stock: 40,
+        lead_time_days: 14,
+        lead_time_std_days: 3.0,
+        holding_cost_annual_rate: 0.22,
+        order_fixed_cost: 120.0,
+        moq: 30,
+        target_service_level: 0.95,
+        base_daily_demand: 5.4,
+        demand_trend: "STEADY",
+        demand_variance: 1.5
+      },
+      {
+        sku_id: "RET-ECO-005",
+        name: "Zero-Waste Bamboo Cutlery & Straw Pack",
+        category: "Eco Lifestyle",
+        sector: "Retail",
+        unit_cost: 3.2,
+        selling_price: 12.99,
+        current_stock: 850,
+        incoming_po_stock: 0,
+        lead_time_days: 10,
+        lead_time_std_days: 2.0,
+        holding_cost_annual_rate: 0.18,
+        order_fixed_cost: 50.0,
+        moq: 100,
+        target_service_level: 0.90,
+        base_daily_demand: 0.2,
+        demand_trend: "STAGNANT",
+        demand_variance: 0.4
+      },
+      {
+        sku_id: "RET-FIT-006",
+        name: "Apex Pulse GPS Fitness Smartwatch",
+        category: "Consumer Electronics",
+        sector: "Retail",
+        unit_cost: 72.0,
+        selling_price: 159.0,
+        current_stock: 14,
+        incoming_po_stock: 0,
+        lead_time_days: 15,
+        lead_time_std_days: 3.5,
+        holding_cost_annual_rate: 0.20,
+        order_fixed_cost: 110.0,
+        moq: 50,
+        target_service_level: 0.98,
+        base_daily_demand: 11.8,
+        demand_trend: "SURGING",
+        demand_variance: 3.0
+      },
+
+      // Manufacturing SKUs
+      {
+        sku_id: "MFG-SEMI-101",
+        name: "STM32F4 32-Bit Microcontroller IC (LQFP-100)",
+        category: "Semiconductors & ICs",
+        sector: "Manufacturing",
+        unit_cost: 4.85,
+        selling_price: 12.0,
+        current_stock: 420,
+        incoming_po_stock: 1500,
+        lead_time_days: 45,
+        lead_time_std_days: 8.0,
+        holding_cost_annual_rate: 0.18,
+        order_fixed_cost: 250.0,
+        moq: 1000,
+        target_service_level: 0.99,
+        base_daily_demand: 65.0,
+        demand_trend: "SURGING",
+        demand_variance: 12.0,
+        bom_dependencies: ["Robot Controller Assembly", "IoT Sensor Gateway"]
+      },
+      {
+        sku_id: "MFG-RAW-102",
+        name: "Stainless Steel Coil Grade 304 (2.0mm Gauge)",
+        category: "Raw Metals & Alloy",
+        sector: "Manufacturing",
+        unit_cost: 340.0,
+        selling_price: 520.0,
+        current_stock: 95,
+        incoming_po_stock: 0,
+        lead_time_days: 28,
+        lead_time_std_days: 5.0,
+        holding_cost_annual_rate: 0.24,
+        order_fixed_cost: 400.0,
+        moq: 20,
+        target_service_level: 0.95,
+        base_daily_demand: 0.9,
+        demand_trend: "DECLINING",
+        demand_variance: 0.5,
+        bom_dependencies: ["Chassis Sub-frame", "Industrial Enclosure"]
+      },
+      {
+        sku_id: "MFG-BATT-103",
+        name: "High-Drain Li-Ion 18650 3000mAh Battery Cell",
+        category: "Energy Storage & Cells",
+        sector: "Manufacturing",
+        unit_cost: 3.25,
+        selling_price: 8.5,
+        current_stock: 2400,
+        incoming_po_stock: 5000,
+        lead_time_days: 21,
+        lead_time_std_days: 4.0,
+        holding_cost_annual_rate: 0.19,
+        order_fixed_cost: 180.0,
+        moq: 2000,
+        target_service_level: 0.98,
+        base_daily_demand: 140.0,
+        demand_trend: "STEADY",
+        demand_variance: 22.0,
+        bom_dependencies: ["48V Powertrain Module", "Back-up Power Unit"]
+      },
+      {
+        sku_id: "MFG-MECH-104",
+        name: "NEMA 23 High-Torque Hybrid Stepper Motor",
+        category: "Electromechanical",
+        sector: "Manufacturing",
+        unit_cost: 28.5,
+        selling_price: 65.0,
+        current_stock: 160,
+        incoming_po_stock: 200,
+        lead_time_days: 18,
+        lead_time_std_days: 3.0,
+        holding_cost_annual_rate: 0.20,
+        order_fixed_cost: 120.0,
+        moq: 100,
+        target_service_level: 0.96,
+        base_daily_demand: 12.0,
+        demand_trend: "STEADY",
+        demand_variance: 2.8,
+        bom_dependencies: ["3-Axis Gantry Machine", "Conveyor Sorter Drive"]
+      },
+      {
+        sku_id: "MFG-SEAL-105",
+        name: "High-Temp Viton Fluorocarbon O-Ring (AS568-112)",
+        category: "Fasteners & Hardware",
+        sector: "Manufacturing",
+        unit_cost: 0.45,
+        selling_price: 1.8,
+        current_stock: 12500,
+        incoming_po_stock: 0,
+        lead_time_days: 10,
+        lead_time_std_days: 1.5,
+        holding_cost_annual_rate: 0.15,
+        order_fixed_cost: 30.0,
+        moq: 2500,
+        target_service_level: 0.92,
+        base_daily_demand: 4.5,
+        demand_trend: "STAGNANT",
+        demand_variance: 2.0,
+        bom_dependencies: ["Pneumatic Actuator Assembly"]
+      },
+      {
+        sku_id: "MFG-GEAR-106",
+        name: "Planetary Reduction Gearbox 10:1 Backlash <5arcmin",
+        category: "Precision Transmission",
+        sector: "Manufacturing",
+        unit_cost: 185.0,
+        selling_price: 450.0,
+        current_stock: 9,
+        incoming_po_stock: 0,
+        lead_time_days: 60,
+        lead_time_std_days: 10.0,
+        holding_cost_annual_rate: 0.22,
+        order_fixed_cost: 350.0,
+        moq: 15,
+        target_service_level: 0.99,
+        base_daily_demand: 2.8,
+        demand_trend: "SURGING",
+        demand_variance: 0.9,
+        bom_dependencies: ["Robotic Articulated Arm Joint 2"]
+      }
+    ];
+
+    let currentSector = "Retail";
+    let activeFilter = "ALL";
+    let leadTimeShockPct = 0;
+    let demandSurgePct = 0;
+    let selectedServiceLevel = 0.95;
+    let selectedSkuForForecast = null;
+    let activeModalSku = null;
+
+    function getZ(sl) {
+      if (sl >= 0.99) return 2.33;
+      if (sl >= 0.98) return 2.05;
+      if (sl >= 0.95) return 1.65;
+      if (sl >= 0.90) return 1.28;
+      return 1.65;
+    }
+
+    function calculateSkuMetrics(item) {
+      const effLeadTime = item.lead_time_days * (1 + leadTimeShockPct / 100);
+      const effLeadTimeStd = item.lead_time_std_days * (1 + (leadTimeShockPct / 100) * 0.5);
+      const effDailyDemand = Math.max(0.1, item.base_daily_demand * (1 + demandSurgePct / 100));
+      const effDemandStd = item.demand_variance;
+      const z = getZ(selectedServiceLevel);
+
+      const combinedVariance = (effLeadTime * Math.pow(effDemandStd, 2)) + (Math.pow(effDailyDemand, 2) * Math.pow(effLeadTimeStd, 2));
+      const safetyStock = Math.ceil(z * Math.sqrt(combinedVariance));
+      const leadTimeDemand = effDailyDemand * effLeadTime;
+      const reorderPoint = Math.ceil(leadTimeDemand + safetyStock);
+
+      const annualDemand = effDailyDemand * 365;
+      const annualHoldingPerUnit = item.unit_cost * item.holding_cost_annual_rate;
+      const rawEoq = annualHoldingPerUnit > 0 ? Math.sqrt((2 * annualDemand * item.order_fixed_cost) / annualHoldingPerUnit) : item.moq;
+      const eoq = Math.max(item.moq, Math.ceil(rawEoq));
+
+      const totalEffectiveStock = item.current_stock + item.incoming_po_stock;
+      const daysToStockout = Number((item.current_stock / effDailyDemand).toFixed(1));
+
+      const demand14d = effDailyDemand * 14;
+      const std14d = effDemandStd * Math.sqrt(14);
+      let stockoutProb = 0;
+      if (std14d > 0) {
+        const stockZ = (item.current_stock - demand14d) / std14d;
+        const sign = stockZ >= 0 ? 1 : -1;
+        const x = Math.abs(stockZ) / Math.sqrt(2);
+        const t = 1.0 / (1.0 + 0.3275911 * x);
+        const erfVal = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+        stockoutProb = Math.max(0, Math.min(100, (1 - 0.5 * (1 + sign * erfVal)) * 100));
+      } else {
+        stockoutProb = item.current_stock < demand14d ? 100 : 0;
+      }
+
+      let healthStatus = "HEALTHY";
+      let excessUnits = 0;
+      const overstockThreshold = reorderPoint + (2 * safetyStock) + eoq;
+
+      if (daysToStockout <= (effLeadTime * 0.75) || item.current_stock <= (safetyStock * 0.4)) {
+        healthStatus = "CRITICAL";
+      } else if (totalEffectiveStock <= reorderPoint) {
+        healthStatus = "LOW";
+      } else if (item.demand_trend === "STAGNANT" && item.current_stock > 100) {
+        healthStatus = "DEAD";
+        excessUnits = Math.max(0, item.current_stock - Math.ceil(effDailyDemand * 30));
+      } else if (totalEffectiveStock > overstockThreshold) {
+        healthStatus = "EXCESS";
+        excessUnits = Math.max(0, totalEffectiveStock - (reorderPoint + safetyStock));
+      }
+
+      const excessCapital = excessUnits * item.unit_cost;
+      const annualHoldingWaste = excessCapital * item.holding_cost_annual_rate;
+
+      return {
+        ...item,
+        effDailyDemand,
+        effLeadTime,
+        effDemandStd,
+        safetyStock,
+        reorderPoint,
+        eoq,
+        totalEffectiveStock,
+        daysToStockout,
+        stockoutProb: Math.round(stockoutProb),
+        healthStatus,
+        excessUnits,
+        excessCapital,
+        annualHoldingWaste,
+        zScore: z
+      };
+    }
+
+    function setSector(sector) {
+      currentSector = sector;
+      const retailBtn = document.getElementById("sector-retail-btn");
+      const mfgBtn = document.getElementById("sector-mfg-btn");
+
+      if (sector === "Retail") {
+        retailBtn.className = "px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all bg-blue-600 text-white shadow";
+        mfgBtn.className = "px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all text-slate-400 hover:text-slate-200";
+      } else {
+        mfgBtn.className = "px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all bg-blue-600 text-white shadow";
+        retailBtn.className = "px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all text-slate-400 hover:text-slate-200";
+      }
+
+      populateSkuDropdown();
+      refreshAll();
+    }
+
+    function setFilter(filter) {
+      activeFilter = filter;
+      const buttons = ["ALL", "CRITICAL", "LOW", "HEALTHY", "EXCESS"];
+      buttons.forEach(b => {
+        const btn = document.getElementById(`filter-btn-${b}`);
+        if (!btn) return;
+        if (b === filter) {
+          btn.className = "px-2.5 py-1 rounded bg-slate-800 text-white font-medium";
+        } else {
+          btn.className = "px-2.5 py-1 rounded text-slate-400 hover:text-slate-200";
+        }
+      });
+      renderTable();
+    }
+
+    function updateSimulationParams() {
+      leadTimeShockPct = parseInt(document.getElementById("lead-time-shock").value, 10);
+      demandSurgePct = parseInt(document.getElementById("demand-shock").value, 10);
+      selectedServiceLevel = parseFloat(document.getElementById("service-level").value);
+
+      document.getElementById("lead-time-shock-val").textContent = `+${leadTimeShockPct}%`;
+      document.getElementById("demand-shock-val").textContent = (demandSurgePct >= 0 ? `+` : ``) + `${demandSurgePct}%`;
+
+      refreshAll();
+    }
+
+    function resetSimulationParams() {
+      document.getElementById("lead-time-shock").value = 0;
+      document.getElementById("demand-shock").value = 0;
+      document.getElementById("service-level").value = "0.95";
+      updateSimulationParams();
+    }
+
+    function populateSkuDropdown() {
+      const select = document.getElementById("forecast-sku-select");
+      const items = RAW_DATA.filter(d => d.sector === currentSector);
+      select.innerHTML = "";
+      items.forEach((item, idx) => {
+        const opt = document.createElement("option");
+        opt.value = item.sku_id;
+        opt.textContent = `${item.sku_id} - ${item.name.substring(0, 28)}...`;
+        if (idx === 0) opt.selected = true;
+        select.appendChild(opt);
+      });
+      selectedSkuForForecast = items[0]?.sku_id || null;
+    }
+
+    function refreshAll() {
+      renderKpis();
+      renderAlertBanner();
+      renderForecastChart();
+      renderExcessRadar();
+      renderTable();
+    }
+
+    function getActiveSectorMetrics() {
+      return RAW_DATA.filter(d => d.sector === currentSector).map(calculateSkuMetrics);
+    }
+
+    function renderKpis() {
+      const metrics = getActiveSectorMetrics();
+
+      const criticalCount = metrics.filter(m => m.healthStatus === "CRITICAL").length;
+      const lowCount = metrics.filter(m => m.healthStatus === "LOW").length;
+      const totalExcessCapital = metrics.reduce((acc, m) => acc + m.excessCapital, 0);
+      const totalAnnualWaste = metrics.reduce((acc, m) => acc + m.annualHoldingWaste, 0);
+      const totalValuation = metrics.reduce((acc, m) => acc + (m.current_stock * m.unit_cost), 0);
+
+      document.getElementById("kpi-stockout-count").textContent = criticalCount;
+      document.getElementById("kpi-reorder-count").textContent = lowCount;
+      document.getElementById("kpi-excess-capital").textContent = `$${Math.round(totalExcessCapital).toLocaleString()}`;
+      document.getElementById("kpi-holding-waste").textContent = `$${Math.round(totalAnnualWaste).toLocaleString()}`;
+      document.getElementById("kpi-total-val").textContent = `$${Math.round(totalValuation).toLocaleString()}`;
+      document.getElementById("kpi-active-skus").textContent = `${metrics.length} Active SKUs`;
+
+      const excessCount = metrics.filter(m => m.excessUnits > 0).length;
+      document.getElementById("kpi-excess-sub").textContent = `${excessCount} SKUs with > 90d cover`;
+      document.getElementById("excess-cash-reclaim").textContent = `$${Math.round(totalExcessCapital).toLocaleString()}`;
+    }
+
+    function renderAlertBanner() {
+      const metrics = getActiveSectorMetrics();
+      const criticalItem = metrics.find(m => m.healthStatus === "CRITICAL") || metrics.find(m => m.healthStatus === "LOW");
+      const banner = document.getElementById("alert-banner");
+      const headline = document.getElementById("alert-headline");
+
+      if (criticalItem) {
+        banner.className = "bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/60 border border-red-500/40 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-md";
+        headline.innerHTML = `<strong>${criticalItem.sku_id} (${criticalItem.name})</strong> has only <strong>${criticalItem.daysToStockout} days</strong> of stock remaining! Supplier lead time is ${Math.round(criticalItem.effLeadTime)} days.`;
+      } else {
+        banner.className = "bg-gradient-to-r from-emerald-950/70 via-slate-900 to-blue-950/60 border border-emerald-500/40 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-md";
+        headline.innerHTML = `<span class="text-emerald-400 font-bold">ALL HEALTHY:</span> No immediate stockout emergencies. Buffers comfortably absorb projected consumer and factory demand.`;
+      }
+    }
+
+    function renderExcessRadar() {
+      const metrics = getActiveSectorMetrics();
+      const list = document.getElementById("excess-items-list");
+      list.innerHTML = "";
+
+      const slowOrExcess = metrics.filter(m => m.excessUnits > 0 || m.healthStatus === "DEAD" || m.healthStatus === "EXCESS");
+
+      if (slowOrExcess.length === 0) {
+        list.innerHTML = `<div class="p-6 text-center text-slate-500 text-xs">No dead or excess stock detected. Inventory lean and high-turnover.</div>`;
+        return;
+      }
+
+      slowOrExcess.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "bg-slate-900/80 hover:bg-slate-800/80 transition border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 cursor-pointer";
+        div.onclick = () => openSkuModal(item.sku_id);
+
+        const isDead = item.healthStatus === "DEAD";
+        const tagClass = isDead ? "bg-red-500/20 text-red-400 border-red-500/30" : "bg-purple-500/20 text-purple-300 border-purple-500/30";
+        const tagText = isDead ? "DEAD STOCK (90d+ Idle)" : "EXCESS OVERSTOCK";
+
+        div.innerHTML = `
+          <div class="flex flex-col gap-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-white truncate">${item.name}</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded border ${tagClass}">${tagText}</span>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-slate-400">
+              <span>SKU: <strong class="text-slate-300">${item.sku_id}</strong></span>
+              <span>Excess: <strong class="text-purple-300">${item.excessUnits} units</strong></span>
+              <span>DOH: <strong class="text-slate-300">${Math.round(item.daysToStockout)} days</strong></span>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-xs font-bold text-purple-400">$${Math.round(item.excessCapital).toLocaleString()}</div>
+            <div class="text-[10px] text-slate-500">Tied Capital</div>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function renderTable() {
+      const metrics = getActiveSectorMetrics();
+      const tbody = document.getElementById("sku-table-body");
+      const searchVal = (document.getElementById("sku-search-input").value || "").toLowerCase();
+
+      tbody.innerHTML = "";
+
+      const filtered = metrics.filter(item => {
+        if (searchVal && !item.name.toLowerCase().includes(searchVal) && !item.sku_id.toLowerCase().includes(searchVal)) {
+          return false;
+        }
+        if (activeFilter === "CRITICAL" && item.healthStatus !== "CRITICAL") return false;
+        if (activeFilter === "LOW" && item.healthStatus !== "LOW") return false;
+        if (activeFilter === "HEALTHY" && item.healthStatus !== "HEALTHY") return false;
+        if (activeFilter === "EXCESS" && (item.healthStatus !== "EXCESS" && item.healthStatus !== "DEAD")) return false;
+        return true;
+      });
+
+      document.getElementById("table-sku-count").textContent = `${filtered.length} SKUs`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-500">No SKUs matching criteria.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-800/40 transition group";
+
+        let statusBadge = "";
+        let stockoutProbColor = "text-slate-400";
+        if (item.stockoutProb >= 60) stockoutProbColor = "text-red-400 font-bold";
+        else if (item.stockoutProb >= 25) stockoutProbColor = "text-amber-400 font-bold";
+
+        switch (item.healthStatus) {
+          case "CRITICAL":
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">STOCKOUT RISK</span>`;
+            break;
+          case "LOW":
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">REORDER NOW</span>`;
+            break;
+          case "DEAD":
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/30">DEAD STOCK</span>`;
+            break;
+          case "EXCESS":
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">OVERSTOCK</span>`;
+            break;
+          default:
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">HEALTHY</span>`;
+        }
+
+        let actionText = "";
+        if (item.healthStatus === "CRITICAL" || item.healthStatus === "LOW") {
+          actionText = `<span class="text-amber-300 font-medium">Issue PO (${item.eoq}u)</span>`;
+        } else if (item.healthStatus === "EXCESS" || item.healthStatus === "DEAD") {
+          actionText = `<span class="text-purple-300 font-medium">Liquidate ${item.excessUnits}u</span>`;
+        } else {
+          actionText = `<span class="text-slate-400">Maintain Buffer</span>`;
+        }
+
+        tr.innerHTML = `
+          <td class="py-3 px-3">
+            <div class="font-bold text-slate-100">${item.name}</div>
+            <div class="text-[11px] font-mono text-slate-400">${item.sku_id}</div>
+          </td>
+          <td class="py-3 px-3 text-slate-400">${item.category}</td>
+          <td class="py-3 px-3 text-right font-mono text-slate-300">$${item.unit_cost.toFixed(2)}</td>
+          <td class="py-3 px-3 text-center font-mono font-bold text-white">
+            ${item.current_stock}
+            ${item.incoming_po_stock > 0 ? `<span class="block text-[10px] text-blue-400 font-normal">+${item.incoming_po_stock} PO</span>` : ''}
+          </td>
+          <td class="py-3 px-3 text-center font-mono text-emerald-400 font-semibold">${item.safetyStock}</td>
+          <td class="py-3 px-3 text-center font-mono text-amber-400 font-semibold">${item.reorderPoint}</td>
+          <td class="py-3 px-3 text-center font-mono font-bold ${item.daysToStockout <= item.effLeadTime ? 'text-red-400' : 'text-slate-200'}">
+            ${item.daysToStockout}d
+          </td>
+          <td class="py-3 px-3 text-center font-mono ${stockoutProbColor}">
+            ${item.stockoutProb}%
+          </td>
+          <td class="py-3 px-3 text-center">${statusBadge}</td>
+          <td class="py-3 px-3 text-right text-[11px]">${actionText}</td>
+          <td class="py-3 px-3 text-center">
+            <button onclick="openSkuModal('${item.sku_id}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-blue-600 text-slate-200 hover:text-white transition">
+              Details
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderForecastChart() {
+      const select = document.getElementById("forecast-sku-select");
+      const skuId = select.value;
+      const rawItem = RAW_DATA.find(d => d.sku_id === skuId);
+      if (!rawItem) return;
+
+      const item = calculateSkuMetrics(rawItem);
+
+      document.getElementById("stat-hist-avg").textContent = `${item.base_daily_demand} u/day`;
+      document.getElementById("stat-proj-avg").textContent = `${item.effDailyDemand.toFixed(1)} u/day`;
+      document.getElementById("stat-rop").textContent = `${item.reorderPoint} units`;
+      document.getElementById("stat-ss").textContent = `${item.safetyStock} units`;
+
+      const canvas = document.getElementById("forecastCanvas");
+      const ctx = canvas.getContext("2d");
+      const rect = canvas.getBoundingClientRect();
+
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const width = rect.width;
+      const height = rect.height;
+      const padding = { top: 25, right: 30, bottom: 35, left: 45 };
+
+      ctx.clearRect(0, 0, width, height);
+
+      const historyDays = 30;
+      const forecastDays = 30;
+      const totalPoints = historyDays + forecastDays;
+
+      const histPoints = [];
+      for (let i = 0; i < historyDays; i++) {
+        const noise = (Math.sin(i * 0.8) + Math.cos(i * 0.3)) * (item.effDemandStd * 0.8);
+        histPoints.push(Math.max(1, item.base_daily_demand + noise));
+      }
+
+      const projPoints = [];
+      const lowerBounds = [];
+      const upperBounds = [];
+
+      for (let i = 0; i < forecastDays; i++) {
+        const trendSlope = item.demand_trend === "SURGING" ? (i * 0.15) : (item.demand_trend === "DECLINING" ? (-i * 0.08) : 0);
+        const daySeason = 1 + 0.12 * Math.sin((i % 7) * 2 * Math.PI / 7);
+        const mean = Math.max(1, (item.effDailyDemand + trendSlope) * daySeason);
+        const band = 1.645 * item.effDemandStd * Math.sqrt(1 + i / 7);
+
+        projPoints.push(mean);
+        lowerBounds.push(Math.max(0, mean - band));
+        upperBounds.push(mean + band);
+      }
+
+      const allValues = [...histPoints, ...projPoints, ...upperBounds, item.reorderPoint / 10, item.safetyStock / 10];
+      const maxVal = Math.max(...allValues) * 1.25;
+      const minVal = 0;
+
+      function getX(index) {
+        return padding.left + (index / (totalPoints - 1)) * (width - padding.left - padding.right);
+      }
+
+      function getY(val) {
+        return height - padding.bottom - ((val - minVal) / (maxVal - minVal)) * (height - padding.top - padding.bottom);
+      }
+
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 1;
+
+      for (let g = 0; g <= 4; g++) {
+        const yVal = minVal + (g / 4) * (maxVal - minVal);
+        const yCoord = getY(yVal);
+        ctx.beginPath();
+        ctx.moveTo(padding.left, yCoord);
+        ctx.lineTo(width - padding.right, yCoord);
+        ctx.stroke();
+
+        ctx.fillStyle = "#64748b";
+        ctx.font = "10px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(Math.round(yVal), padding.left - 8, yCoord + 3);
+      }
+
+      const splitX = getX(historyDays - 1);
+      ctx.strokeStyle = "#475569";
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(splitX, padding.top);
+      ctx.lineTo(splitX, height - padding.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("Historical Actuals", splitX - 10, padding.top + 10);
+      ctx.textAlign = "left";
+      ctx.fillText("AI Projected (30-Day)", splitX + 10, padding.top + 10);
+
+      // Confidence Interval Band
+      ctx.fillStyle = "rgba(99, 102, 241, 0.12)";
+      ctx.beginPath();
+      for (let i = 0; i < forecastDays; i++) {
+        const idx = historyDays + i;
+        const x = getX(idx);
+        const yUpper = getY(upperBounds[i]);
+        if (i === 0) ctx.moveTo(x, yUpper);
+        else ctx.lineTo(x, yUpper);
+      }
+      for (let i = forecastDays - 1; i >= 0; i--) {
+        const idx = historyDays + i;
+        const x = getX(idx);
+        const yLower = getY(lowerBounds[i]);
+        ctx.lineTo(x, yLower);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Historical Line
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (let i = 0; i < historyDays; i++) {
+        const x = getX(i);
+        const y = getY(histPoints[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Projected Line
+      ctx.strokeStyle = "#818cf8";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(getX(historyDays - 1), getY(histPoints[historyDays - 1]));
+      for (let i = 0; i < forecastDays; i++) {
+        const x = getX(historyDays + i);
+        const y = getY(projPoints[i]);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Safety Stock & ROP Lines
+      const ssRate = item.safetyStock / item.effLeadTime;
+      const ropRate = item.reorderPoint / item.effLeadTime;
+
+      ctx.strokeStyle = "#10b981";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.moveTo(splitX, getY(ssRate));
+      ctx.lineTo(width - padding.right, getY(ssRate));
+      ctx.stroke();
+
+      ctx.strokeStyle = "#f59e0b";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(splitX, getY(ropRate));
+      ctx.lineTo(width - padding.right, getY(ropRate));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#10b981";
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("Safety Stock Buffer", width - padding.right - 95, getY(ssRate) - 4);
+
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillText("Reorder Trigger (ROP)", width - padding.right - 95, getY(ropRate) - 4);
+    }
+
+    function openSkuModal(skuId) {
+      const rawItem = RAW_DATA.find(d => d.sku_id === skuId);
+      if (!rawItem) return;
+
+      const item = calculateSkuMetrics(rawItem);
+      activeModalSku = item;
+
+      document.getElementById("modal-sku-name").textContent = item.name;
+      document.getElementById("modal-sku-id").textContent = `${item.sku_id} \u2022 ${item.category} \u2022 ${item.sector}`;
+      document.getElementById("modal-param-davg").textContent = `${item.effDailyDemand.toFixed(1)} u/d`;
+      document.getElementById("modal-param-dstd").textContent = `\u03C3 = ${item.effDemandStd} u/d`;
+      document.getElementById("modal-param-lt").textContent = `${Math.round(item.effLeadTime)} days`;
+      document.getElementById("modal-param-ltstd").textContent = `\u03C3_L = ${item.lead_time_std_days.toFixed(1)} days`;
+      document.getElementById("modal-param-ss").textContent = `${item.safetyStock} units`;
+      document.getElementById("modal-param-z").textContent = `Z = ${item.zScore} (${Math.round(selectedServiceLevel * 100)}%)`;
+      document.getElementById("modal-param-eoq").textContent = `${item.eoq} units`;
+      document.getElementById("modal-param-moq").textContent = `MOQ = ${item.moq} units`;
+
+      const badge = document.getElementById("modal-status-badge");
+      if (item.healthStatus === "CRITICAL") {
+        badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30";
+        badge.textContent = "CRITICAL STOCKOUT IMMINENT";
+      } else if (item.healthStatus === "LOW") {
+        badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+        badge.textContent = "LOW STOCK - REORDER TRIGGERED";
+      } else if (item.healthStatus === "EXCESS" || item.healthStatus === "DEAD") {
+        badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30";
+        badge.textContent = item.healthStatus === "DEAD" ? "DEAD CAPITAL ALERT" : "EXCESS INVENTORY";
+      } else {
+        badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+        badge.textContent = "HEALTHY STOCK BALANCE";
+      }
+
+      document.getElementById("modal-mc-prob").textContent = `${item.stockoutProb}%`;
+      const lostSalesEst = Math.round(Math.max(0, (item.effLeadTime * item.effDailyDemand) - item.current_stock));
+      document.getElementById("modal-mc-lost").textContent = `${lostSalesEst} units`;
+      document.getElementById("modal-mc-order").textContent = `${item.eoq} units`;
+
+      let actionDesc = "";
+      if (item.healthStatus === "CRITICAL") {
+        actionDesc = `URGENT: Depletion expected in ${item.daysToStockout} days! Expedite PO of ${item.eoq} units immediately to prevent customer order fulfillment collapse.`;
+      } else if (item.healthStatus === "LOW") {
+        actionDesc = `Standard Replenishment: Current stock breached ROP (${item.reorderPoint} units). Place order of ${item.eoq} units with vendor.`;
+      } else if (item.healthStatus === "EXCESS" || item.healthStatus === "DEAD") {
+        actionDesc = `Excess Capital Reduction: ${item.excessUnits} units exceeding maximum optimal buffer. Trigger promotional discount or supplier return to liberate $${Math.round(item.excessCapital)} tied cash.`;
+      } else {
+        actionDesc = `Balanced: Stock covers ${item.daysToStockout} days of projected demand. Safety stock buffer of ${item.safetyStock} units fully intact.`;
+      }
+      document.getElementById("modal-action-text").textContent = actionDesc;
+
+      document.getElementById("sku-modal").classList.remove("hidden");
+    }
+
+    function closeSkuModal() {
+      document.getElementById("sku-modal").classList.add("hidden");
+      activeModalSku = null;
+    }
+
+    function approvePurchaseOrder() {
+      if (!activeModalSku) return;
+      alert(`\u2705 Purchase Order Requisition for SKU ${activeModalSku.sku_id} (${activeModalSku.eoq} units) submitted to ERP system successfully.`);
+      closeSkuModal();
+    }
+
+    function exportToCSV() {
+      const metrics = getActiveSectorMetrics();
+      let csv = "SKU_ID,Name,Category,Sector,Unit_Cost,Current_Stock,Safety_Stock,ROP,EOQ,Days_To_Stockout,Stockout_Prob_Pct,Health_Status,Excess_Capital\n";
+      metrics.forEach(m => {
+        csv += `"${m.sku_id}","${m.name.replace(/"/g, '""')}","${m.category}","${m.sector}",${m.unit_cost},${m.current_stock},${m.safetyStock},${m.reorderPoint},${m.eoq},${m.daysToStockout},${m.stockoutProb},"${m.healthStatus}",${m.excessCapital}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `OptiStock_${currentSector}_Inventory_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    window.addEventListener("resize", () => {
+      renderForecastChart();
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      populateSkuDropdown();
+      refreshAll();
+    });
+  </script>
+</body>
+</html>
